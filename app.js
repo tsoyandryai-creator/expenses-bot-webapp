@@ -69,13 +69,18 @@
     const url = new URL(FUNCTIONS_URL);
     url.searchParams.set("action", action);
     if (period) url.searchParams.set("period", period);
+    // initData передаём параметром запроса, а не заголовком: кастомный
+    // заголовок (X-Telegram-Init-Data) не проходит CORS-preflight на уровне
+    // API-шлюза Supabase (он его не знает и не пропускает), а стандартные
+    // apikey/content-type — пропускает. Теперь, когда фронтенд и бэкенд на
+    // разных доменах (GitHub Pages + Supabase), это стало заметно.
+    url.searchParams.set("initData", tg.initData || "");
 
     const res = await fetch(url.toString(), {
       method,
       headers: {
         "Content-Type": "application/json",
         apikey: SUPABASE_PUBLISHABLE_KEY,
-        "X-Telegram-Init-Data": tg.initData || "",
       },
       body: body ? JSON.stringify(body) : undefined,
     });
