@@ -15,7 +15,18 @@
   --cat-home: #1baf7a;
   --cat-fun: #eda100;
   --cat-health: #e87ba4;
+  --cat-clothes: #7a5cff;
+  --cat-comm: #14b8a6;
+  --cat-edu: #d6455c;
+  --cat-gifts: #ff8fab;
   --cat-other: #008300;
+
+  --cat-salary: #1baf7a;
+  --cat-sidejob: #2a9d8f;
+  --cat-gift-income: #eda100;
+  --cat-other-income: #4433a6;
+
+  --negative: #d03b3b;
 }
 
 :root[data-theme="dark"] {
@@ -35,7 +46,18 @@
   --cat-home: #199e70;
   --cat-fun: #c98500;
   --cat-health: #d55181;
+  --cat-clothes: #8f75ff;
+  --cat-comm: #2dd4c0;
+  --cat-edu: #e2596e;
+  --cat-gifts: #ff9fbc;
   --cat-other: #008300;
+
+  --cat-salary: #199e70;
+  --cat-sidejob: #33b3a3;
+  --cat-gift-income: #c98500;
+  --cat-other-income: #9686f5;
+
+  --negative: #e14c4c;
 }
 
 * { box-sizing: border-box; }
@@ -94,7 +116,8 @@ p { margin: 0; }
   font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
-.segmented.view-toggle button { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.segmented.view-toggle button,
+.segmented.type-toggle button { display: flex; align-items: center; justify-content: center; gap: 5px; }
 
 /* hero stat */
 .hero-stat .label {
@@ -204,3 +227,8 @@ p { margin: 0; }
 }
 .total-line .lbl { font-size: 13px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; }
 .total-line .val { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 19px; font-variant-numeric: tabular-nums; }
+
+/* баланс = доход - расход, всегда считается отдельно от разбивки по
+   категориям и выводится отдельной строкой под ней */
+.balance-line.positive .val { color: var(--success); }
+.balance-line.negative .val { color: var(--negative); }

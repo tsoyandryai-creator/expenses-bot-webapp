@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Мои расходы</title>
+  <title>Мои финансы</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Golos+Text:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -11,7 +11,12 @@
 
   <!-- ЭКРАН: сводка -->
   <section id="screen-dashboard" class="screen">
-    <h1 class="brand">Мои расходы</h1>
+    <h1 class="brand">Мои финансы</h1>
+
+    <div class="segmented type-toggle" data-role="tx-type">
+      <button type="button" data-type="expense">➖ Расходы</button>
+      <button type="button" data-type="income">➕ Доход</button>
+    </div>
 
     <div class="segmented" data-role="period">
       <button type="button" data-period="day">День</button>
@@ -27,18 +32,18 @@
     <div class="week-bars" data-role="week-bars" hidden></div>
 
     <div class="receipt">
-      <div class="receipt-head"><span>Недавние</span><span>сумма</span></div>
+      <div class="receipt-head"><span data-role="recent-head">Недавние расходы</span><span>сумма</span></div>
       <div data-role="recent-list" class="receipt-body">
         <p class="empty-hint">Загрузка…</p>
       </div>
     </div>
 
-    <button type="button" class="stats-link" data-role="open-stats">📊 Статистика по категориям</button>
+    <button type="button" class="stats-link" data-role="open-stats">📊 Статистика и баланс</button>
   </section>
 
-  <!-- ЭКРАН: добавление расхода -->
+  <!-- ЭКРАН: добавление -->
   <section id="screen-add" class="screen" hidden>
-    <h1 class="screen-title">Добавить расход</h1>
+    <h1 class="screen-title" data-role="add-title">Добавить расход</h1>
 
     <div class="cat-grid" data-role="category-grid"></div>
 
@@ -48,7 +53,7 @@
     </div>
 
     <div class="amount-field">
-      <label class="lbl" for="amount-input">Сумма расхода</label>
+      <label class="lbl" for="amount-input" data-role="amount-label">Сумма расхода</label>
       <div class="input-row">
         <input id="amount-input" class="amount-input" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0" data-role="amount-input" />
         <span class="cur">₽</span>
@@ -63,6 +68,11 @@
   <!-- ЭКРАН: статистика -->
   <section id="screen-stats" class="screen" hidden>
     <h1 class="screen-title">Статистика</h1>
+
+    <div class="segmented type-toggle" data-role="tx-type-stats">
+      <button type="button" data-type="expense">➖ Расходы</button>
+      <button type="button" data-type="income">➕ Доход</button>
+    </div>
 
     <div class="segmented" data-role="period-stats">
       <button type="button" data-period="day">День</button>
@@ -90,6 +100,11 @@
     <div class="total-line">
       <span class="lbl" data-role="stats-total-label">Итого за неделю</span>
       <span class="val" data-role="stats-total">— ₽</span>
+    </div>
+
+    <div class="total-line balance-line" data-role="balance-line">
+      <span class="lbl" data-role="balance-label">Баланс за неделю</span>
+      <span class="val" data-role="balance-value">— ₽</span>
     </div>
   </section>
 

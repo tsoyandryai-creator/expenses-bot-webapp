@@ -11,45 +11,70 @@
   const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = window.APP_CONFIG;
   const FUNCTIONS_URL = SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/webapp-api";
 
-  // Цвет закреплён за категорией по имени — как в дизайн-системе (fixed order,
+  // Расход и доход — независимые сущности (свои категории, своя таблица в
+  // БД, свои цвета здесь), чтобы визуально они тоже не смешивались. Цвет
+  // закреплён за категорией по имени — как в дизайн-системе (fixed order,
   // никогда не назначается по рангу/позиции). Категории сверх дефолтных
   // (пользователь мог создать свою) получают нейтральную точку, а не
   // сгенерированный цвет.
   const CATEGORY_COLORS = {
-    "Еда": "--cat-food",
-    "Транспорт": "--cat-transport",
-    "Жильё": "--cat-home",
-    "Развлечения": "--cat-fun",
-    "Здоровье": "--cat-health",
-    "Прочее": "--cat-other",
+    expense: {
+      "🍔 Еда": "--cat-food",
+      "🚌 Транспорт": "--cat-transport",
+      "🏠 Жильё": "--cat-home",
+      "🎉 Развлечения": "--cat-fun",
+      "💊 Здоровье": "--cat-health",
+      "👕 Одежда": "--cat-clothes",
+      "📱 Связь": "--cat-comm",
+      "📚 Образование": "--cat-edu",
+      "🎁 Подарки": "--cat-gifts",
+      "💰 Прочее": "--cat-other",
+    },
+    income: {
+      "💼 Зарплата": "--cat-salary",
+      "💵 Подработка": "--cat-sidejob",
+      "🎁 Подарок": "--cat-gift-income",
+      "🤑 Прочее": "--cat-other-income",
+    },
   };
   function categoryColor(name) {
-    const varName = CATEGORY_COLORS[name];
+    const varName = CATEGORY_COLORS[state.txType][name];
     return varName ? `var(${varName})` : "var(--ink-3)";
   }
 
   const WEEKDAY_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
   const PERIOD_LABEL = { day: "день", week: "неделю", month: "месяц" };
+  const TYPE_LABEL = { expense: "расхода", income: "дохода" };
+  const TYPE_VERB = { expense: "Потрачено", income: "Заработано" };
+  const TYPE_ACTION = { expense: "add_expense", income: "add_income" };
+  const TYPE_TITLE = { expense: "Добавить расход", income: "Добавить доход" };
 
   // ---------- состояние ----------
   const state = {
     screen: "dashboard",
     period: "week",
+    txType: "expense", // что сейчас показываем/добавляем: "expense" | "income"
     statsView: "list",
-    data: null, // { isNew, categories, expenses, stats, total }
+    data: null, // { isNew, balance, expense: {categories, transactions, stats, total}, income: {...} }
     loading: true,
     selectedCategoryId: null,
     addingCategory: false,
   };
 
+  // текущий срез данных (расход или доход — смотря что выбрано)
+  function currentSlice() {
+    return state.data ? state.data[state.txType] : null;
+  }
+
   // ---------- вспомогательное ----------
-  function formatMoney(amount) {
+  function formatMoney(amount, { signed = false } = {}) {
     const n = Number(amount);
     const rounded = Math.round(n * 100) / 100;
     const isWhole = Number.isInteger(rounded);
     const formatted = new Intl.NumberFormat("ru-RU", {
       minimumFractionDigits: isWhole ? 0 : 2,
       maximumFractionDigits: 2,
+      signDisplay: signed ? "exceptZero" : "auto",
     }).format(rounded);
     return `${formatted} ₽`;
   }
@@ -111,7 +136,11 @@
       state.data = await api("bootstrap", { period: state.period });
     } catch (err) {
       tg.showAlert("Не удалось загрузить данные: " + err.message);
-      state.data = state.data || { categories: [], expenses: [], stats: [], total: 0 };
+      state.data = state.data || {
+        balance: 0,
+        expense: { categories: [], transactions: [], stats: [], total: 0 },
+        income: { categories: [], transactions: [], stats: [], total: 0 },
+      };
     } finally {
       state.loading = false;
       render();
@@ -128,6 +157,12 @@
     render();
   }
 
+  function setTxType(type) {
+    if (type === state.txType) return;
+    state.txType = type;
+    render();
+  }
+
   tg.BackButton.onClick(() => showScreen("dashboard"));
 
   // MainButton-обработчик регистрируется один раз и просто смотрит на текущий
@@ -135,7 +170,7 @@
   // обработчики (реальный SDK не гарантирует автозамену/дедупликацию).
   tg.MainButton.onClick(() => {
     if (state.screen === "dashboard") goToAdd();
-    else if (state.screen === "add") submitExpense();
+    else if (state.screen === "add") submitTransaction();
   });
 
   // ---------- рендер: сводка ----------
@@ -144,32 +179,39 @@
     const total = document.querySelector('[data-role="hero-total"]');
     const weekBars = document.querySelector('[data-role="week-bars"]');
     const list = document.querySelector('[data-role="recent-list"]');
+    const recentHead = document.querySelector('[data-role="recent-head"]');
 
-    label.textContent = `Потрачено за ${PERIOD_LABEL[state.period]}`;
+    document.querySelectorAll('[data-role="tx-type"] button').forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.type === state.txType);
+    });
+
+    label.textContent = `${TYPE_VERB[state.txType]} за ${PERIOD_LABEL[state.period]}`;
+    recentHead.textContent = state.txType === "expense" ? "Недавние расходы" : "Недавний доход";
 
     document.querySelectorAll('[data-role="period"] button').forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.period === state.period);
     });
 
-    if (state.loading || !state.data) {
+    const slice = currentSlice();
+    if (state.loading || !slice) {
       total.textContent = "…";
       list.innerHTML = '<p class="empty-hint">Загрузка…</p>';
       weekBars.hidden = true;
       return;
     }
 
-    total.textContent = formatMoney(state.data.total);
+    total.textContent = formatMoney(slice.total);
 
     if (state.period === "week") {
       weekBars.hidden = false;
-      renderWeekBars(weekBars, state.data.expenses);
+      renderWeekBars(weekBars, slice.transactions);
     } else {
       weekBars.hidden = true;
     }
 
-    const items = state.data.expenses.slice(0, 6);
+    const items = slice.transactions.slice(0, 6);
     if (items.length === 0) {
-      list.innerHTML = '<p class="empty-hint">Пока нет расходов за этот период.</p>';
+      list.innerHTML = `<p class="empty-hint">Пока нет ${TYPE_LABEL[state.txType]} за этот период.</p>`;
     } else {
       list.innerHTML = items
         .map((e) => {
@@ -190,7 +232,7 @@
     }
   }
 
-  function renderWeekBars(container, expenses) {
+  function renderWeekBars(container, transactions) {
     const now = new Date();
     const days = [];
     for (let i = 6; i >= 0; i--) {
@@ -199,7 +241,7 @@
       days.push({ key: d.toDateString(), label: WEEKDAY_SHORT[d.getDay()], total: 0, isToday: i === 0 });
     }
     const byKey = new Map(days.map((d) => [d.key, d]));
-    for (const e of expenses) {
+    for (const e of transactions) {
       const key = new Date(e.created_at).toDateString();
       const bucket = byKey.get(key);
       if (bucket) bucket.total += Number(e.amount);
@@ -219,7 +261,12 @@
   // ---------- рендер: добавление ----------
   function renderAdd() {
     const grid = document.querySelector('[data-role="category-grid"]');
-    const categories = (state.data && state.data.categories) || [];
+    const slice = currentSlice();
+    const categories = (slice && slice.categories) || [];
+
+    document.querySelector('[data-role="add-title"]').textContent = TYPE_TITLE[state.txType];
+    document.querySelector('[data-role="amount-label"]').textContent =
+      state.txType === "expense" ? "Сумма расхода" : "Сумма дохода";
 
     grid.innerHTML =
       categories
@@ -248,7 +295,7 @@
       tg.MainButton.setText("Выбери категорию");
       tg.MainButton.disable();
     } else if (!amount) {
-      tg.MainButton.setText("Введи сумму расхода");
+      tg.MainButton.setText(`Введи сумму ${TYPE_LABEL[state.txType]}`);
       tg.MainButton.disable();
     } else {
       tg.MainButton.setText(`Записать ${formatMoney(amount)}`);
@@ -256,7 +303,7 @@
     }
   }
 
-  async function submitExpense() {
+  async function submitTransaction() {
     const amount = currentAmount();
     if (!state.selectedCategoryId || !amount) return;
 
@@ -264,7 +311,7 @@
 
     tg.MainButton.showProgress();
     try {
-      await api("add_expense", {
+      await api(TYPE_ACTION[state.txType], {
         method: "POST",
         body: { categoryId: state.selectedCategoryId, amount, comment: comment || null },
       });
@@ -272,7 +319,7 @@
       showScreen("dashboard");
       await loadBootstrap();
     } catch (err) {
-      tg.showAlert("Не получилось записать расход: " + err.message);
+      tg.showAlert(`Не получилось записать ${TYPE_LABEL[state.txType]}: ` + err.message);
     } finally {
       tg.MainButton.hideProgress();
     }
@@ -283,8 +330,11 @@
     const name = input.value.trim();
     if (!name) return;
     try {
-      const { category } = await api("add_category", { method: "POST", body: { name } });
-      state.data.categories.push(category);
+      const { category } = await api("add_category", {
+        method: "POST",
+        body: { name, type: state.txType },
+      });
+      currentSlice().categories.push(category);
       state.selectedCategoryId = category.id;
       state.addingCategory = false;
       input.value = "";
@@ -296,6 +346,9 @@
 
   // ---------- рендер: статистика ----------
   function renderStats() {
+    document.querySelectorAll('[data-role="tx-type-stats"] button').forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.type === state.txType);
+    });
     document.querySelectorAll('[data-role="period-stats"] button').forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.period === state.period);
     });
@@ -308,19 +361,34 @@
     const legendEl = document.querySelector('[data-role="legend-list"]');
     const totalLabel = document.querySelector('[data-role="stats-total-label"]');
     const totalVal = document.querySelector('[data-role="stats-total"]');
+    const balanceLabel = document.querySelector('[data-role="balance-label"]');
+    const balanceVal = document.querySelector('[data-role="balance-value"]');
+    const balanceLine = document.querySelector('[data-role="balance-line"]');
 
-    totalLabel.textContent = `Итого за ${PERIOD_LABEL[state.period]}`;
+    totalLabel.textContent =
+      (state.txType === "expense" ? "Итого расход за " : "Итого доход за ") + PERIOD_LABEL[state.period];
+    balanceLabel.textContent = `Баланс за ${PERIOD_LABEL[state.period]}`;
 
     if (state.loading || !state.data) {
       listEl.innerHTML = '<p class="empty-hint">Загрузка…</p>';
       donutWrap.hidden = true;
       legendEl.hidden = true;
       totalVal.textContent = "…";
+      balanceVal.textContent = "…";
       return;
     }
 
-    const stats = state.data.stats;
-    const total = state.data.total;
+    // Баланс — расход и доход, посчитанные раздельно, сведённые в одну
+    // строку в самом конце. Не зависит от того, какой тип сейчас выбран
+    // в переключателе выше.
+    const balance = state.data.balance;
+    balanceVal.textContent = formatMoney(balance, { signed: true });
+    balanceLine.classList.toggle("positive", balance > 0);
+    balanceLine.classList.toggle("negative", balance < 0);
+
+    const slice = currentSlice();
+    const stats = slice.stats;
+    const total = slice.total;
     totalVal.textContent = formatMoney(total);
 
     const isDonut = state.statsView === "donut";
@@ -329,7 +397,7 @@
     legendEl.hidden = !isDonut;
 
     if (stats.length === 0) {
-      listEl.innerHTML = `<p class="empty-hint">За ${PERIOD_LABEL[state.period]} расходов нет.</p>`;
+      listEl.innerHTML = `<p class="empty-hint">За ${PERIOD_LABEL[state.period]} ${TYPE_LABEL[state.txType]} нет.</p>`;
       legendEl.innerHTML = "";
       document.querySelector('[data-role="donut-circle"]').style.background = "var(--hairline)";
       document.querySelector('[data-role="donut-total"]').textContent = formatMoney(0);
@@ -399,7 +467,7 @@
 
     if (state.screen === "dashboard") {
       tg.BackButton.hide();
-      tg.MainButton.setText("➕ Добавить расход");
+      tg.MainButton.setText(state.txType === "expense" ? "➕ Добавить расход" : "➕ Добавить доход");
       tg.MainButton.enable();
       tg.MainButton.show();
       renderDashboard();
@@ -419,6 +487,18 @@
   }
 
   // ---------- события ----------
+  document.querySelector('[data-role="tx-type"]').addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-type]");
+    if (!btn) return;
+    setTxType(btn.dataset.type);
+  });
+
+  document.querySelector('[data-role="tx-type-stats"]').addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-type]");
+    if (!btn) return;
+    setTxType(btn.dataset.type);
+  });
+
   document.querySelector('[data-role="period"]').addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-period]");
     if (!btn || btn.dataset.period === state.period) return;
